@@ -2,6 +2,15 @@ from tkinter import *
 import smtplib
 from email.message import EmailMessage
 from tkinter import messagebox
+import re
+
+regex = re.compile(r'([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+')
+
+def isValid(email):
+    if re.fullmatch(regex, email):
+      return True
+    else:
+      return False
 
 def send_message():
     sender_email = "programlostest@gmail.com"
@@ -14,7 +23,7 @@ def send_message():
         server.ehlo()
         server.login(sender_email, sender_password)
 
-        recipient_email = recipient_address_input.get()
+        recipient_email = recipient_address_input.get().strip()
         email_body = emailBody.get('1.0', END)
 
         print("Login Successful")
@@ -23,11 +32,13 @@ def send_message():
         msg.set_content(email_body)
         msg["Subject"] = subject_entry.get()
         msg["From"] = sender_email
-        msg["To"] = recipient_email.strip()
+        msg["To"] = recipient_email        
 
-        answer = analyze_message()
-
-        if answer: server.send_message(msg)
+        if isValid(recipient_email):
+            answer = messagebox.askyesno("Question","Do you like Python?")
+            if answer: server.send_message(msg)
+        else:
+            raise Exception("Invalid recipient email")
 
         print("Sent Mail Successful")
 
@@ -36,10 +47,6 @@ def send_message():
         emailBody.delete('1.0', END)
     except:
         messagebox.showerror("Error", "Something went wrong :(")
-
-def analyze_message():
-    answer = messagebox.askyesno("Question","Do you like Python?")
-    return answer
 
 app = Tk()
 
