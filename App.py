@@ -1,18 +1,81 @@
-from tkinter import *
-import smtplib
-from email.message import EmailMessage
-from tkinter import messagebox
-import re
-import traceback
+import gensim
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from nltk.stem import SnowballStemmer
+from nltk.corpus import stopwords
+import pickle
+from keras.models import Model
+from tensorflow.keras import models
+from tensorflow import keras
+import tensorflow as tf
+import pandas as pd
+import numpy as np
 import logging
+import traceback
+import re
+import datetime
+import tkinter as tk
+from tkinter import messagebox
+from tkinter.scrolledtext import ScrolledText
+from email.message import EmailMessage
+import smtplib
+from tkinter import *
+import nltk
+nltk.download('stopwords')
 
+
+model = models.load_model("models/model(0_93).h5")
+
+labels = pd.read_csv("labels.txt", sep=",").columns
+
+with open('tokenizer.pickle', 'rb') as handle:
+    tokenizer = pickle.load(handle)
+
+stop_words = stopwords.words("english")
+stemmer = SnowballStemmer("english")
+
+TEXT_CLEANING_RE = "@\S+|https?:\S+|http?:\S|[^A-Za-z0-9]+"
+
+
+def preprocess(text, stem=False):
+    # Remove link,user and special characters
+    text = re.sub(TEXT_CLEANING_RE, ' ', str(text).lower()).strip()
+    tokens = []
+    for token in text.split():
+        if token not in stop_words:
+            if stem:
+                tokens.append(stemmer.stem(token))
+            else:
+                tokens.append(token)
+    return " ".join(tokens)
+
+
+def getSentiment(emailBody):
+    test = np.array([emailBody])
+    text = preprocess(test)
+    text = text.split()
+    text = pad_sequences(tokenizer.texts_to_sequences(test), maxlen=200)
+    prediction = model.predict(text).argmax()
+
+    return labels[prediction]
+
+###########################################################################################
+
+
+# Email
 regex = re.compile(
     r'([A-Za-z0-9]+[.-_])*[A-Za-z0-9]+@[A-Za-z0-9-]+(\.[A-Z|a-z]{2,})+')
 
 
 def quit_server():
-    server.quit()
-    print("Server Closed")
+    try:
+        server.quit()
+        inputSenderAddress.delete('1.0', END)
+        entrySenderPassword.delete(0, END)
+        addLog("Server quit")
+    except Exception as e:
+        addLog(traceback.format_exc())
+        logging.error(traceback.format_exc())
+
 
 def isValid(email):
     if re.fullmatch(regex, email):
@@ -48,21 +111,25 @@ def send_message():
         msg["Bcc"] = inputBCC.get('1.0', END).strip().split(",")
 
         if isValid(emailRecipient):
-            answer = messagebox.askyesno("Question", "Do you like Python?")
+            answer = messagebox.askyesno("Sentiment", "Sentiment of your mail: " 
+             + getSentiment(emailBody))
             if answer:
                 server.send_message(msg)
+                addLog("Email sent successfully to: " + emailRecipient)
+                entrySubject.delete(0, END)
+                entryRecipientAddress.delete(0, END)
+                inputEmailBody.delete('1.0', END)
+                inputCC.delete('1.0', END)
+                inputBCC.delete('1.0', END)
+            else:
+                addLog("Email not sent")
         else:
+            addLog("Invalid recipient email")
             raise Exception("Invalid recipient email")
 
-        print("Sent Mail Successful")
-
-        entrySubject.delete(0, END)
-        entryRecipientAddress.delete(0, END)
-        inputEmailBody.delete('1.0', END)
-        inputCC.delete('1.0', END)
-        inputBCC.delete('1.0', END)
     except Exception as e:
         messagebox.showerror("Error", "Something went wrong :(")
+        addLog(traceback.format_exc())
         logging.error(traceback.format_exc())
 
 ################################# UI #################################
@@ -70,9 +137,9 @@ def send_message():
 
 app = Tk()
 
-app.geometry("700x700")
-app.minsize(700, 700)
-app.maxsize(700, 700)
+app.geometry("700x800")
+app.minsize(700, 800)
+app.maxsize(700, 800)
 
 app.title("Email Sender")
 
@@ -93,8 +160,24 @@ lblSenderAddress = Label(text="Sender Email:",
                          background="gray", fg="white", font=("Arial", 16))
 lblSenderPassword = Label(text="Sender Password:",
                           background="gray", fg="white", font=("Arial", 16))
+logText = ""
+lblLog = ScrolledText(app, width=70, height=15)
+lblLog.configure(state='normal')
+lblLog.insert(tk.INSERT, logText)
+lblLog.configure(state='disabled')
+
+
+def addLog(text):
+    global logText
+    lblLog.configure(state='normal')
+    lblLog.insert(tk.INSERT, logText + '\n' +
+                  str(datetime.datetime.now()) + ': ' + text)
+    lblLog.configure(state='disabled')
+
 
 # INPUTS
+global inputSenderAddress
+global entrySenderPassword
 inputSenderAddress = Text(app, height=1, width=50)
 inputSenderPassword = StringVar()
 inputCC = Text(app, height=1, width=50)
@@ -102,7 +185,8 @@ inputBCC = Text(app, height=1, width=50)
 inputEmailBody = Text(app, height=5, width=50)
 inputRecipientAddress = StringVar()
 inputSubject = StringVar()
-entrySenderPassword = Entry(textvariable=inputSenderPassword, width="66", show="*")
+entrySenderPassword = Entry(
+    textvariable=inputSenderPassword, width="66", show="*")
 entryRecipientAddress = Entry(
     textvariable=inputRecipientAddress, width="66")
 entrySubject = Entry(textvariable=inputSubject, width="66")
@@ -116,9 +200,9 @@ radioOutlook = Radiobutton(app, text="Outlook (SMTP Host UNAVAILABLE)", variable
 
 # BUTTONS
 buttonSend = Button(app, text="Send Mail", bg="green",
-                command=send_message, width="30", height="3", fg="white", font=("Arial", 16))
+                    command=send_message, width="30", height="3", fg="white", font=("Arial", 16))
 buttonQuit = Button(app, text="Quit Server", bg="red",
-                command=quit_server, width="15", height="3", fg="white", font=("Arial", 16))
+                    command=quit_server, width="15", height="3", fg="white", font=("Arial", 16))
 
 # PLACING
 widgetsLabel = [lblSenderAddress, lblSenderPassword,
@@ -140,6 +224,8 @@ radioGmail.grid(sticky="EN", row=0, column=0,
                        pady=(10, 10), padx=(20, 10))
 radioOutlook.grid(sticky="EN", row=0, column=1,
                   pady=(10, 10), padx=(20, 10))
+lblLog.grid(sticky="EN", row=len(widgetsLabel) + 2,
+            column=0, columnspan=2)
 
 place(widgetsLabel, widgetsInput)
 
