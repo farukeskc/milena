@@ -54,9 +54,18 @@ def getSentiment(emailBody):
     text = preprocess(test)
     text = text.split()
     text = pad_sequences(tokenizer.texts_to_sequences(test), maxlen=200)
-    prediction = model.predict(text).argmax()
-
-    return labels[prediction]
+    prediction = model.predict(text)
+    print(prediction)
+    print(["{:.3f}".format(i) for i in prediction[0]])
+    print(np.sum(prediction[0]))
+    print(prediction[0]/np.sum(prediction[0]))
+    sentimentIndex = prediction.argmax()
+    sentimentValue = prediction[0][sentimentIndex]
+    prediction[0][sentimentIndex] = 0
+    alternativeSentiment = prediction.argmax()
+    alternativeSentimentValue = prediction[0][alternativeSentiment]
+    
+    return labels[sentimentIndex] + " with probability: " + "{:.3f}%".format(sentimentValue*100) + "\n" + labels[alternativeSentiment] + " with probability: " + "{:.3f}%".format(alternativeSentimentValue*100)
 
 ###########################################################################################
 
@@ -111,7 +120,7 @@ def send_message():
         msg["Bcc"] = inputBCC.get('1.0', END).strip().split(",")
 
         if isValid(emailRecipient):
-            answer = messagebox.askyesno("Sentiment", "Sentiment of your mail: " 
+            answer = messagebox.askyesno("Sentiment", "Sentiment of your mail: \n" 
              + getSentiment(emailBody))
             if answer:
                 server.send_message(msg)
